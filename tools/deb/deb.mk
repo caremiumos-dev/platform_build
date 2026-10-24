@@ -47,18 +47,24 @@ deb-static: $(addprefix __deb-static-,$(DEB_PACKAGES))
 __deb-runtime-%:
 	@set -e; \
 	pkg=$*; \
-	so=$(DEB_LIB_DIR)/$$pkg.so; \
-	[ -f $$so ] || $(MAKE) -C $(DEB_TOP) $$pkg; \
+	sos="$(if $(DEB_SO_$*),$(DEB_SO_$*),$*)"; \
+	missing=0; \
+	for s in $$sos; do [ -f $(DEB_LIB_DIR)/$$s.so ] || missing=1; done; \
+	[ $$missing = 0 ] || $(MAKE) -C $(DEB_TOP) $(if $(DEB_BUILD_$*),$(DEB_BUILD_$*),$*); \
 	root=$(DEB_WORK)/$$pkg; \
 	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/lib; \
-	cp -aL $$so $$root/system/lib/; \
-	depends="bionic (>= $(DEB_BIONIC_VERSION))"; \
-	for lib in $$(readelf -d $$so | sed -n 's/.*Shared library: \[\(lib.*\)\.so\]/\1/p'); do \
-	    case $$lib in \
-	        libc|libm|libdl) ;; \
-	        *) depends="$$depends, $$lib" ;; \
-	    esac; \
+	for s in $$sos; do cp -aL $(DEB_LIB_DIR)/$$s.so $$root/system/lib/; done; \
+	depends=""; \
+	[ "$$pkg" = bionic ] || depends="bionic (>= $(DEB_BIONIC_VERSION))"; \
+	for s in $$sos; do \
+	    for lib in $$(readelf -d $(DEB_LIB_DIR)/$$s.so | sed -n 's/.*Shared library: \[\(lib.*\)\.so\]/\1/p'); do \
+	        case $$lib in \
+	            libc|libm|libdl) ;; \
+	            *) if [ -z "$$depends" ]; then depends="$$lib"; else depends="$$depends, $$lib"; fi ;; \
+	        esac; \
+	    done; \
 	done; \
+	[ -n "$$depends" ] || [ "$$pkg" = bionic ] || depends="bionic (>= $(DEB_BIONIC_VERSION))"; \
 	size=$$(du -sk $$root | cut -f1); \
 	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* library)"; \
 	sed -e "s|@PACKAGE@|$$pkg|g" \
@@ -69,6 +75,7 @@ __deb-runtime-%:
 	    -e "s|@DEPENDS@|$$depends|g" \
 	    -e "s|@DESCRIPTION@|$$desc|g" \
 	    $(DEB_HELPER_DIR)/control-runtime.in > $$root/DEBIAN/control; \
+	[ -n "$$depends" ] || sed -i '/^Depends:/d' $$root/DEBIAN/control; \
 	echo 2.0 > $(DEB_WORK)/debian-binary; \
 	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/control.tar.gz -C $$root/DEBIAN .; \
 	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/data.tar.gz -C $$root ./system; \
