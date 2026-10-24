@@ -47,6 +47,7 @@ deb-static: $(addprefix __deb-static-,$(DEB_PACKAGES))
 __deb-runtime-%:
 	@set -e; \
 	pkg=$*; \
+	ver=$(if $(DEB_VERSION_$*),$(DEB_VERSION_$*),$(DEB_VERSION)); \
 	sos="$(if $(DEB_SO_$*),$(DEB_SO_$*),$*)"; \
 	missing=0; \
 	for s in $$sos; do [ -f $(DEB_LIB_DIR)/$$s.so ] || missing=1; done; \
@@ -68,7 +69,7 @@ __deb-runtime-%:
 	size=$$(du -sk $$root | cut -f1); \
 	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* library)"; \
 	sed -e "s|@PACKAGE@|$$pkg|g" \
-	    -e "s|@VERSION@|$(DEB_VERSION)|g" \
+	    -e "s|@VERSION@|$${ver}|g" \
 	    -e "s|@ARCH@|$(DEB_ARCH)|g" \
 	    -e "s|@MAINTAINER@|$(DEB_MAINTAINER)|g" \
 	    -e "s|@INSTALLED_SIZE@|$$size|g" \
@@ -79,15 +80,16 @@ __deb-runtime-%:
 	echo 2.0 > $(DEB_WORK)/debian-binary; \
 	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/control.tar.gz -C $$root/DEBIAN .; \
 	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/data.tar.gz -C $$root ./system; \
-	rm -f $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb; \
-	ar rc $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb \
+	rm -f $(CURDIR)/$${pkg}_$${ver}_$(DEB_ARCH).deb; \
+	ar rc $(CURDIR)/$${pkg}_$${ver}_$(DEB_ARCH).deb \
 	    $(DEB_WORK)/debian-binary $(DEB_WORK)/control.tar.gz $(DEB_WORK)/data.tar.gz; \
-	echo "生成 $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb  (Depends: $$depends)"
+	echo "生成 $(CURDIR)/$${pkg}_$${ver}_$(DEB_ARCH).deb  (Depends: $$depends)"
 
 # ---- 开发头文件 ----------------------------------------------------------
 __deb-dev-%:
 	@set -e; \
 	pkg=$*; \
+	ver=$(if $(DEB_VERSION_$*),$(DEB_VERSION_$*),$(DEB_VERSION)); \
 	root=$(DEB_WORK)/$$pkg-dev; \
 	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/include; \
 	for d in $(DEB_INCDIRS_$*); do cp -aL $$d $$root/system/include/; done; \
@@ -95,12 +97,12 @@ __deb-dev-%:
 	for f in $(DEB_INCFILES_$*); do cp -aL $$f $$root/system/include/; done; \
 	size=$$(du -sk $$root | cut -f1); \
 	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* library) (development files)"; \
-	depends="$$pkg (= $(DEB_VERSION))"; \
+	depends="$$pkg (= $${ver})"; \
 	extra="$(DEB_DEV_DEPENDS_$*)"; \
 	[ -z "$$extra" ] || depends="$$depends, $$extra"; \
 	sed -e "s|@PACKAGE@|$$pkg-dev|g" \
 	    -e "s|@DEPENDS@|$$depends|g" \
-	    -e "s|@VERSION@|$(DEB_VERSION)|g" \
+	    -e "s|@VERSION@|$${ver}|g" \
 	    -e "s|@ARCH@|$(DEB_ARCH)|g" \
 	    -e "s|@MAINTAINER@|$(DEB_MAINTAINER)|g" \
 	    -e "s|@INSTALLED_SIZE@|$$size|g" \
@@ -109,15 +111,16 @@ __deb-dev-%:
 	echo 2.0 > $(DEB_WORK)/debian-binary; \
 	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/control.tar.gz -C $$root/DEBIAN .; \
 	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/data.tar.gz -C $$root ./system; \
-	rm -f $(CURDIR)/$${pkg}-dev_$(DEB_VERSION)_$(DEB_ARCH).deb; \
-	ar rc $(CURDIR)/$${pkg}-dev_$(DEB_VERSION)_$(DEB_ARCH).deb \
+	rm -f $(CURDIR)/$${pkg}-dev_$${ver}_$(DEB_ARCH).deb; \
+	ar rc $(CURDIR)/$${pkg}-dev_$${ver}_$(DEB_ARCH).deb \
 	    $(DEB_WORK)/debian-binary $(DEB_WORK)/control.tar.gz $(DEB_WORK)/data.tar.gz; \
-	echo "生成 $(CURDIR)/$${pkg}-dev_$(DEB_VERSION)_$(DEB_ARCH).deb"
+	echo "生成 $(CURDIR)/$${pkg}-dev_$${ver}_$(DEB_ARCH).deb"
 
 # ---- 纯头文件包（如 linux-headers） --------------------------------------
 __deb-header-%:
 	@set -e; \
 	pkg=$*; \
+	ver=$(if $(DEB_VERSION_$*),$(DEB_VERSION_$*),$(DEB_VERSION)); \
 	root=$(DEB_WORK)/$$pkg; \
 	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/include; \
 	for d in $(DEB_INCDIRS_$*); do cp -aL $$d $$root/system/include/; done; \
@@ -128,7 +131,7 @@ __deb-header-%:
 	depends="$(DEB_HEADERONLY_DEPENDS_$*)"; \
 	sed -e "s|@PACKAGE@|$$pkg|g" \
 	    -e "s|@DEPENDS@|$$depends|g" \
-	    -e "s|@VERSION@|$(DEB_VERSION)|g" \
+	    -e "s|@VERSION@|$${ver}|g" \
 	    -e "s|@ARCH@|$(DEB_ARCH)|g" \
 	    -e "s|@MAINTAINER@|$(DEB_MAINTAINER)|g" \
 	    -e "s|@INSTALLED_SIZE@|$$size|g" \
@@ -138,15 +141,16 @@ __deb-header-%:
 	echo 2.0 > $(DEB_WORK)/debian-binary; \
 	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/control.tar.gz -C $$root/DEBIAN .; \
 	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/data.tar.gz -C $$root ./system; \
-	rm -f $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb; \
-	ar rc $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb \
+	rm -f $(CURDIR)/$${pkg}_$${ver}_$(DEB_ARCH).deb; \
+	ar rc $(CURDIR)/$${pkg}_$${ver}_$(DEB_ARCH).deb \
 	    $(DEB_WORK)/debian-binary $(DEB_WORK)/control.tar.gz $(DEB_WORK)/data.tar.gz; \
-	echo "生成 $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb"
+	echo "生成 $(CURDIR)/$${pkg}_$${ver}_$(DEB_ARCH).deb"
 
 # ---- 静态库 --------------------------------------------------------------
 __deb-static-%:
 	@set -e; \
 	pkg=$*; \
+	ver=$(if $(DEB_VERSION_$*),$(DEB_VERSION_$*),$(DEB_VERSION)); \
 	smod=$(if $(DEB_STATIC_MODULE_$*),$(DEB_STATIC_MODULE_$*),$*); \
 	sname=$(if $(DEB_STATIC_NAME_$*),$(DEB_STATIC_NAME_$*),$$smod); \
 	a=$(DEB_STATIC_DIR)/$${smod}_intermediates/$${sname}.a; \
@@ -158,7 +162,7 @@ __deb-static-%:
 	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* library) (static archive)"; \
 	sed -e "s|@PACKAGE@|$$pkg-static|g" \
 	    -e "s|@DEV@|$$pkg-dev|g" \
-	    -e "s|@VERSION@|$(DEB_VERSION)|g" \
+	    -e "s|@VERSION@|$${ver}|g" \
 	    -e "s|@ARCH@|$(DEB_ARCH)|g" \
 	    -e "s|@MAINTAINER@|$(DEB_MAINTAINER)|g" \
 	    -e "s|@INSTALLED_SIZE@|$$size|g" \
@@ -167,11 +171,11 @@ __deb-static-%:
 	echo 2.0 > $(DEB_WORK)/debian-binary; \
 	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/control.tar.gz -C $$root/DEBIAN .; \
 	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/data.tar.gz -C $$root ./system; \
-	rm -f $(CURDIR)/$${pkg}-static_$(DEB_VERSION)_$(DEB_ARCH).deb; \
-	ar rc $(CURDIR)/$${pkg}-static_$(DEB_VERSION)_$(DEB_ARCH).deb \
+	rm -f $(CURDIR)/$${pkg}-static_$${ver}_$(DEB_ARCH).deb; \
+	ar rc $(CURDIR)/$${pkg}-static_$${ver}_$(DEB_ARCH).deb \
 	    $(DEB_WORK)/debian-binary $(DEB_WORK)/control.tar.gz $(DEB_WORK)/data.tar.gz; \
-	echo "生成 $(CURDIR)/$${pkg}-static_$(DEB_VERSION)_$(DEB_ARCH).deb"
+	echo "生成 $(CURDIR)/$${pkg}-static_$${ver}_$(DEB_ARCH).deb"
 
 deb-clean:
 	rm -rf $(DEB_WORK)
-	rm -f $(CURDIR)/*_$(DEB_VERSION)_$(DEB_ARCH).deb
+	rm -f $(CURDIR)/*_*_$(DEB_ARCH).deb
