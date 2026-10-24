@@ -26,16 +26,19 @@ DEB_PRODUCT_OUT ?= $(if $(ANDROID_PRODUCT_OUT),$(ANDROID_PRODUCT_OUT),$(DEB_TOP)
 DEB_LIB_DIR := $(DEB_PRODUCT_OUT)/system/lib
 DEB_STATIC_DIR := $(DEB_PRODUCT_OUT)/obj/STATIC_LIBRARIES
 DEB_WORK := $(CURDIR)/out-deb
+DEB_HELPER_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 
-DEB_ARCH := armhf
+DEB_ARCH_MAP := arm=armhf arm64=arm64 x86=i386 x86_64=amd64 mips=mipsel mips64=mips64el riscv64=riscv64
+
+# 架构映射（TARGET_ARCH / libc.so 推断 / 默认 arm）
+include $(DEB_HELPER_DIR)/arch.mk
+
 DEB_MAINTAINER := CaremiumOS Developers <caremium-os@googlegroups.com>
 DEB_VERSION ?= $(shell sed -n 's/^PLATFORM_VERSION\.OPM1 := //p' $(DEB_TOP)/build/make/core/version_defaults.mk)
 ifeq ($(strip $(DEB_VERSION)),)
 DEB_VERSION := 8.1.0
 endif
 DEB_BIONIC_VERSION := $(DEB_VERSION)
-
-DEB_HELPER_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 
 .PHONY: deb deb-dev deb-static deb-clean
 
