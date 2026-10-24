@@ -40,7 +40,7 @@ DEB_HELPER_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 .PHONY: deb deb-dev deb-static deb-clean
 
 deb: $(addprefix __deb-runtime-,$(DEB_PACKAGES))
-deb-dev: $(addprefix __deb-dev-,$(DEB_PACKAGES))
+deb-dev: $(addprefix __deb-dev-,$(DEB_PACKAGES)) $(addprefix __deb-header-,$(DEB_HEADERONLY_PACKAGES))
 deb-static: $(addprefix __deb-static-,$(DEB_PACKAGES))
 
 # ---- 运行时共享库 --------------------------------------------------------
@@ -95,8 +95,11 @@ __deb-dev-%:
 	for f in $(DEB_INCFILES_$*); do cp -aL $$f $$root/system/include/; done; \
 	size=$$(du -sk $$root | cut -f1); \
 	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* library) (development files)"; \
+	depends="$$pkg (= $(DEB_VERSION))"; \
+	extra="$(DEB_DEV_DEPENDS_$*)"; \
+	[ -z "$$extra" ] || depends="$$depends, $$extra"; \
 	sed -e "s|@PACKAGE@|$$pkg-dev|g" \
-	    -e "s|@RUNTIME@|$$pkg|g" \
+	    -e "s|@DEPENDS@|$$depends|g" \
 	    -e "s|@VERSION@|$(DEB_VERSION)|g" \
 	    -e "s|@ARCH@|$(DEB_ARCH)|g" \
 	    -e "s|@MAINTAINER@|$(DEB_MAINTAINER)|g" \
@@ -110,6 +113,35 @@ __deb-dev-%:
 	ar rc $(CURDIR)/$${pkg}-dev_$(DEB_VERSION)_$(DEB_ARCH).deb \
 	    $(DEB_WORK)/debian-binary $(DEB_WORK)/control.tar.gz $(DEB_WORK)/data.tar.gz; \
 	echo "生成 $(CURDIR)/$${pkg}-dev_$(DEB_VERSION)_$(DEB_ARCH).deb"
+
+# ---- 纯头文件包（如 linux-headers） --------------------------------------
+__deb-header-%:
+	@set -e; \
+	pkg=$*; \
+	root=$(DEB_WORK)/$$pkg; \
+	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/include; \
+	for d in $(DEB_INCDIRS_$*); do cp -aL $$d $$root/system/include/; done; \
+	for d in $(DEB_INCDIRCONTENTS_$*); do cp -aL $$d/. $$root/system/include/; done; \
+	for f in $(DEB_INCFILES_$*); do cp -aL $$f $$root/system/include/; done; \
+	size=$$(du -sk $$root | cut -f1); \
+	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* headers)"; \
+	depends="$(DEB_HEADERONLY_DEPENDS_$*)"; \
+	sed -e "s|@PACKAGE@|$$pkg|g" \
+	    -e "s|@DEPENDS@|$$depends|g" \
+	    -e "s|@VERSION@|$(DEB_VERSION)|g" \
+	    -e "s|@ARCH@|$(DEB_ARCH)|g" \
+	    -e "s|@MAINTAINER@|$(DEB_MAINTAINER)|g" \
+	    -e "s|@INSTALLED_SIZE@|$$size|g" \
+	    -e "s|@DESCRIPTION@|$$desc|g" \
+	    $(DEB_HELPER_DIR)/control-headers.in > $$root/DEBIAN/control; \
+	[ -n "$$depends" ] || sed -i '/^Depends:/d' $$root/DEBIAN/control; \
+	echo 2.0 > $(DEB_WORK)/debian-binary; \
+	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/control.tar.gz -C $$root/DEBIAN .; \
+	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/data.tar.gz -C $$root ./system; \
+	rm -f $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb; \
+	ar rc $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb \
+	    $(DEB_WORK)/debian-binary $(DEB_WORK)/control.tar.gz $(DEB_WORK)/data.tar.gz; \
+	echo "生成 $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb"
 
 # ---- 静态库 --------------------------------------------------------------
 __deb-static-%:
