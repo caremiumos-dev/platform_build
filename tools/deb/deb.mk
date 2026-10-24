@@ -5,8 +5,8 @@
 #
 #   DEB_TOP := $(abspath $(CURDIR)/../..)
 #   DEB_PACKAGES        := libfoo libbar
-#   DEB_INCDIRS_libfoo  := include/foo          # 整个目录 -> /system/include/foo/...
-#   DEB_INCFILES_libfoo := include/foo.h        # 单个文件 -> /system/include/foo.h
+#   DEB_INCDIRS_libfoo  := include/foo          # 整个目录 -> /system/usr/include/foo/...
+#   DEB_INCFILES_libfoo := include/foo.h        # 单个文件 -> /system/usr/include/foo.h
 #   DEB_DESC_libfoo     := Foo library
 #   include $(DEB_TOP)/build/make/tools/deb/deb.mk
 #
@@ -14,7 +14,7 @@
 # 定义的 make 函数）：
 #
 #   deb         运行时共享库  -> /system/lib/libX.so（Depends 由 ELF NEEDED 生成）
-#   deb-dev     头文件        -> /system/include/...
+#   deb-dev     头文件        -> /system/usr/include/...
 #   deb-static  静态库        -> /system/lib/libX.a
 #
 # 这些目标只存在于各仓库自己的 Makefile/deb.mk 中，AOSP 默认构建
@@ -94,10 +94,10 @@ __deb-dev-%:
 	pkg=$*; \
 	ver=$(if $(DEB_VERSION_$*),$(DEB_VERSION_$*),$(DEB_VERSION)); \
 	root=$(DEB_WORK)/$$pkg-dev; \
-	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/include; \
-	for d in $(DEB_INCDIRS_$*); do cp -aL $$d $$root/system/include/; done; \
-	for d in $(DEB_INCDIRCONTENTS_$*); do cp -aL $$d/. $$root/system/include/; done; \
-	for f in $(DEB_INCFILES_$*); do cp -aL $$f $$root/system/include/; done; \
+	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/usr/include; \
+	for d in $(DEB_INCDIRS_$*); do cp -aL $$d $$root/system/usr/include/; done; \
+	for d in $(DEB_INCDIRCONTENTS_$*); do cp -aL $$d/. $$root/system/usr/include/; done; \
+	for f in $(DEB_INCFILES_$*); do cp -aL $$f $$root/system/usr/include/; done; \
 	size=$$(du -sk $$root | cut -f1); \
 	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* library) (development files)"; \
 	depends="$$pkg (= $${ver})"; \
@@ -125,10 +125,10 @@ __deb-header-%:
 	pkg=$*; \
 	ver=$(if $(DEB_VERSION_$*),$(DEB_VERSION_$*),$(DEB_VERSION)); \
 	root=$(DEB_WORK)/$$pkg; \
-	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/include; \
-	for d in $(DEB_INCDIRS_$*); do cp -aL $$d $$root/system/include/; done; \
-	for d in $(DEB_INCDIRCONTENTS_$*); do cp -aL $$d/. $$root/system/include/; done; \
-	for f in $(DEB_INCFILES_$*); do cp -aL $$f $$root/system/include/; done; \
+	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/usr/include; \
+	for d in $(DEB_INCDIRS_$*); do cp -aL $$d $$root/system/usr/include/; done; \
+	for d in $(DEB_INCDIRCONTENTS_$*); do cp -aL $$d/. $$root/system/usr/include/; done; \
+	for f in $(DEB_INCFILES_$*); do cp -aL $$f $$root/system/usr/include/; done; \
 	size=$$(du -sk $$root | cut -f1); \
 	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* headers)"; \
 	depends="$(DEB_HEADERONLY_DEPENDS_$*)"; \
