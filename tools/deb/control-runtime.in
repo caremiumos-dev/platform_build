@@ -1,0 +1,11 @@
+Package: @PACKAGE@
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: @MAINTAINER@
+Installed-Size: @INSTALLED_SIZE@
+Section: libs
+Priority: optional
+Depends: @DEPENDS@
+Description: @DESCRIPTION@
+ Shared library built from the Android platform source tree and installed
+ under /system/lib.

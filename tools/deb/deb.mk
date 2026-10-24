@@ -1,0 +1,135 @@
+# ---------------------------------------------------------------------------
+# Generic .deb packaging for Android platform libraries (opt-in only).
+#
+# 仓库在自己的 deb.mk 里声明要打包的库，然后 include 本文件：
+#
+#   DEB_TOP := $(abspath $(CURDIR)/../..)
+#   DEB_PACKAGES        := libfoo libbar
+#   DEB_INCDIRS_libfoo  := include/foo          # 整个目录 -> /system/include/foo/...
+#   DEB_INCFILES_libfoo := include/foo.h        # 单个文件 -> /system/include/foo.h
+#   DEB_DESC_libfoo     := Foo library
+#   include $(DEB_TOP)/build/make/tools/deb/deb.mk
+#
+# 三个目标（在 envsetup 的 shell 里用 `command make` 执行，避免命中 envsetup
+# 定义的 make 函数）：
+#
+#   deb         运行时共享库  -> /system/lib/libX.so（Depends 由 ELF NEEDED 生成）
+#   deb-dev     头文件        -> /system/include/...
+#   deb-static  静态库        -> /system/lib/libX.a
+#
+# 这些目标只存在于各仓库自己的 Makefile/deb.mk 中，AOSP 默认构建
+# （Android.bp/Android.mk）不会引用它们。
+# ---------------------------------------------------------------------------
+
+DEB_TOP ?= $(abspath $(CURDIR)/../..)
+DEB_PRODUCT_OUT ?= $(if $(ANDROID_PRODUCT_OUT),$(ANDROID_PRODUCT_OUT),$(DEB_TOP)/out/target/product/generic)
+DEB_LIB_DIR := $(DEB_PRODUCT_OUT)/system/lib
+DEB_STATIC_DIR := $(DEB_PRODUCT_OUT)/obj/STATIC_LIBRARIES
+DEB_WORK := $(CURDIR)/out-deb
+
+DEB_ARCH := armhf
+DEB_MAINTAINER := CaremiumOS Developers <caremium-os@googlegroups.com>
+DEB_VERSION ?= $(shell sed -n 's/^PLATFORM_VERSION\.OPM1 := //p' $(DEB_TOP)/build/make/core/version_defaults.mk)
+ifeq ($(strip $(DEB_VERSION)),)
+DEB_VERSION := 8.1.0
+endif
+DEB_BIONIC_VERSION := $(DEB_VERSION)
+
+DEB_HELPER_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
+
+.PHONY: deb deb-dev deb-static deb-clean
+
+deb: $(addprefix __deb-runtime-,$(DEB_PACKAGES))
+deb-dev: $(addprefix __deb-dev-,$(DEB_PACKAGES))
+deb-static: $(addprefix __deb-static-,$(DEB_PACKAGES))
+
+# ---- 运行时共享库 --------------------------------------------------------
+__deb-runtime-%:
+	@set -e; \
+	pkg=$*; \
+	so=$(DEB_LIB_DIR)/$$pkg.so; \
+	[ -f $$so ] || $(MAKE) -C $(DEB_TOP) $$pkg; \
+	root=$(DEB_WORK)/$$pkg; \
+	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/lib; \
+	cp -aL $$so $$root/system/lib/; \
+	depends="bionic (>= $(DEB_BIONIC_VERSION))"; \
+	for lib in $$(readelf -d $$so | sed -n 's/.*Shared library: \[\(lib.*\)\.so\]/\1/p'); do \
+	    case $$lib in \
+	        libc|libm|libdl) ;; \
+	        *) depends="$$depends, $$lib" ;; \
+	    esac; \
+	done; \
+	size=$$(du -sk $$root | cut -f1); \
+	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* library)"; \
+	sed -e "s|@PACKAGE@|$$pkg|g" \
+	    -e "s|@VERSION@|$(DEB_VERSION)|g" \
+	    -e "s|@ARCH@|$(DEB_ARCH)|g" \
+	    -e "s|@MAINTAINER@|$(DEB_MAINTAINER)|g" \
+	    -e "s|@INSTALLED_SIZE@|$$size|g" \
+	    -e "s|@DEPENDS@|$$depends|g" \
+	    -e "s|@DESCRIPTION@|$$desc|g" \
+	    $(DEB_HELPER_DIR)/control-runtime.in > $$root/DEBIAN/control; \
+	echo 2.0 > $(DEB_WORK)/debian-binary; \
+	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/control.tar.gz -C $$root/DEBIAN .; \
+	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/data.tar.gz -C $$root ./system; \
+	rm -f $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb; \
+	ar rc $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb \
+	    $(DEB_WORK)/debian-binary $(DEB_WORK)/control.tar.gz $(DEB_WORK)/data.tar.gz; \
+	echo "生成 $(CURDIR)/$${pkg}_$(DEB_VERSION)_$(DEB_ARCH).deb  (Depends: $$depends)"
+
+# ---- 开发头文件 ----------------------------------------------------------
+__deb-dev-%:
+	@set -e; \
+	pkg=$*; \
+	root=$(DEB_WORK)/$$pkg-dev; \
+	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/include; \
+	for d in $(DEB_INCDIRS_$*); do cp -aL $$d $$root/system/include/; done; \
+	for f in $(DEB_INCFILES_$*); do cp -aL $$f $$root/system/include/; done; \
+	size=$$(du -sk $$root | cut -f1); \
+	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* library) (development files)"; \
+	sed -e "s|@PACKAGE@|$$pkg-dev|g" \
+	    -e "s|@RUNTIME@|$$pkg|g" \
+	    -e "s|@VERSION@|$(DEB_VERSION)|g" \
+	    -e "s|@ARCH@|$(DEB_ARCH)|g" \
+	    -e "s|@MAINTAINER@|$(DEB_MAINTAINER)|g" \
+	    -e "s|@INSTALLED_SIZE@|$$size|g" \
+	    -e "s|@DESCRIPTION@|$$desc|g" \
+	    $(DEB_HELPER_DIR)/control-dev.in > $$root/DEBIAN/control; \
+	echo 2.0 > $(DEB_WORK)/debian-binary; \
+	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/control.tar.gz -C $$root/DEBIAN .; \
+	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/data.tar.gz -C $$root ./system; \
+	rm -f $(CURDIR)/$${pkg}-dev_$(DEB_VERSION)_$(DEB_ARCH).deb; \
+	ar rc $(CURDIR)/$${pkg}-dev_$(DEB_VERSION)_$(DEB_ARCH).deb \
+	    $(DEB_WORK)/debian-binary $(DEB_WORK)/control.tar.gz $(DEB_WORK)/data.tar.gz; \
+	echo "生成 $(CURDIR)/$${pkg}-dev_$(DEB_VERSION)_$(DEB_ARCH).deb"
+
+# ---- 静态库 --------------------------------------------------------------
+__deb-static-%:
+	@set -e; \
+	pkg=$*; \
+	a=$(DEB_STATIC_DIR)/$${pkg}_intermediates/$$pkg.a; \
+	[ -f $$a ] || $(MAKE) -C $(DEB_TOP) $$pkg; \
+	root=$(DEB_WORK)/$$pkg-static; \
+	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/lib; \
+	cp -aL $$a $$root/system/lib/; \
+	size=$$(du -sk $$root | cut -f1); \
+	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* library) (static archive)"; \
+	sed -e "s|@PACKAGE@|$$pkg-static|g" \
+	    -e "s|@DEV@|$$pkg-dev|g" \
+	    -e "s|@VERSION@|$(DEB_VERSION)|g" \
+	    -e "s|@ARCH@|$(DEB_ARCH)|g" \
+	    -e "s|@MAINTAINER@|$(DEB_MAINTAINER)|g" \
+	    -e "s|@INSTALLED_SIZE@|$$size|g" \
+	    -e "s|@DESCRIPTION@|$$desc|g" \
+	    $(DEB_HELPER_DIR)/control-static.in > $$root/DEBIAN/control; \
+	echo 2.0 > $(DEB_WORK)/debian-binary; \
+	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/control.tar.gz -C $$root/DEBIAN .; \
+	tar --owner=0 --group=0 --numeric-owner -czf $(DEB_WORK)/data.tar.gz -C $$root ./system; \
+	rm -f $(CURDIR)/$${pkg}-static_$(DEB_VERSION)_$(DEB_ARCH).deb; \
+	ar rc $(CURDIR)/$${pkg}-static_$(DEB_VERSION)_$(DEB_ARCH).deb \
+	    $(DEB_WORK)/debian-binary $(DEB_WORK)/control.tar.gz $(DEB_WORK)/data.tar.gz; \
+	echo "生成 $(CURDIR)/$${pkg}-static_$(DEB_VERSION)_$(DEB_ARCH).deb"
+
+deb-clean:
+	rm -rf $(DEB_WORK)
+	rm -f $(CURDIR)/*_$(DEB_VERSION)_$(DEB_ARCH).deb
