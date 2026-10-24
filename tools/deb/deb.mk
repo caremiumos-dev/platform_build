@@ -84,6 +84,7 @@ __deb-dev-%:
 	root=$(DEB_WORK)/$$pkg-dev; \
 	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/include; \
 	for d in $(DEB_INCDIRS_$*); do cp -aL $$d $$root/system/include/; done; \
+	for d in $(DEB_INCDIRCONTENTS_$*); do cp -aL $$d/. $$root/system/include/; done; \
 	for f in $(DEB_INCFILES_$*); do cp -aL $$f $$root/system/include/; done; \
 	size=$$(du -sk $$root | cut -f1); \
 	desc="$(if $(DEB_DESC_$*),$(DEB_DESC_$*),Android $* library) (development files)"; \
@@ -107,8 +108,10 @@ __deb-dev-%:
 __deb-static-%:
 	@set -e; \
 	pkg=$*; \
-	a=$(DEB_STATIC_DIR)/$${pkg}_intermediates/$$pkg.a; \
-	[ -f $$a ] || $(MAKE) -C $(DEB_TOP) $$pkg; \
+	smod=$(if $(DEB_STATIC_MODULE_$*),$(DEB_STATIC_MODULE_$*),$*); \
+	sname=$(if $(DEB_STATIC_NAME_$*),$(DEB_STATIC_NAME_$*),$$smod); \
+	a=$(DEB_STATIC_DIR)/$${smod}_intermediates/$${sname}.a; \
+	[ -f $$a ] || $(MAKE) -C $(DEB_TOP) $$smod; \
 	root=$(DEB_WORK)/$$pkg-static; \
 	rm -rf $$root; mkdir -p $$root/DEBIAN $$root/system/lib; \
 	cp -aL $$a $$root/system/lib/; \
